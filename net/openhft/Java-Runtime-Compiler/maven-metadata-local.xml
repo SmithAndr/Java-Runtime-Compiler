@@ -3,9 +3,11 @@
   <groupId>net.openhft</groupId>
   <artifactId>Java-Runtime-Compiler</artifactId>
   <versioning>
+    <release>2.2.5-CUSTOM</release>
     <versions>
       <version>2.2.5-SNAPSHOT</version>
+      <version>2.2.5-CUSTOM</version>
     </versions>
-    <lastUpdated>20160717233255</lastUpdated>
+    <lastUpdated>20160717234122</lastUpdated>
   </versioning>
 </metadata>
