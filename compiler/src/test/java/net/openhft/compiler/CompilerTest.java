@@ -97,7 +97,8 @@ public class CompilerTest extends TestCase {
                 "        stop();\n" +
                 '\n' +
                 "    }\n" +
-                "}\n");
+                "}\n",
+                null);
 
         // add a debug break point here and step into this method.
         FooBarTee fooBarTee = new FooBarTee("test foo bar tee");

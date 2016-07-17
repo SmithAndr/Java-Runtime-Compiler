@@ -62,14 +62,14 @@ public class CachedCompiler {
         }
     }
 
-    public Class loadFromJava(@NotNull String className, @NotNull String javaCode) throws ClassNotFoundException {
-        return loadFromJava(getClass().getClassLoader(), className, javaCode);
+    public Class loadFromJava(@NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
+        return loadFromJava(getClass().getClassLoader(), className, javaCode, diagnosticListener);
     }
 
     private boolean errors;
 
     @NotNull
-    Map<String, byte[]> compileFromJava(@NotNull String className, @NotNull String javaCode) {
+    Map<String, byte[]> compileFromJava(@NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) {
         Iterable<? extends JavaFileObject> compilationUnits;
         if (sourceDir != null) {
             String filename = className.replaceAll("\\.", '\\' + File.separator) + ".java";
@@ -82,15 +82,7 @@ public class CachedCompiler {
             compilationUnits = javaFileObjects.values();
         }
         // reuse the same file manager to allow caching of jar files
-        CompilerUtils.s_compiler.getTask(null, CompilerUtils.s_fileManager, new DiagnosticListener<JavaFileObject>() {
-            @Override
-            public void report(Diagnostic<? extends JavaFileObject> diagnostic) {
-                if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
-                    errors = true;
-                    System.err.println(diagnostic);
-                }
-            }
-        }, null, null, compilationUnits).call();
+        CompilerUtils.s_compiler.getTask(null, CompilerUtils.s_fileManager, diagnosticListener, null, null, compilationUnits).call();
         Map<String, byte[]> result = CompilerUtils.s_fileManager.getAllBuffers();
         if (errors) {
             // compilation error, so we want to exclude this file from future compilation passes
@@ -100,7 +92,7 @@ public class CachedCompiler {
         return result;
     }
 
-    public Class loadFromJava(@NotNull ClassLoader classLoader, @NotNull String className, @NotNull String javaCode) throws ClassNotFoundException {
+    public Class loadFromJava(@NotNull ClassLoader classLoader, @NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
         Class clazz = null;
         Map<String, Class> loadedClasses;
         synchronized (loadedClassesMap) {
@@ -112,7 +104,7 @@ public class CachedCompiler {
         }
         if (clazz != null)
             return clazz;
-        for (Map.Entry<String, byte[]> entry : compileFromJava(className, javaCode).entrySet()) {
+        for (Map.Entry<String, byte[]> entry : compileFromJava(className, javaCode, diagnosticListener).entrySet()) {
             String className2 = entry.getKey();
             synchronized (loadedClassesMap) {
                 if (loadedClasses.containsKey(className2))

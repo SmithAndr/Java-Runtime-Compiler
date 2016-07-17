@@ -23,7 +23,9 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.tools.DiagnosticListener;
 import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.*;
@@ -93,7 +95,7 @@ public enum CompilerUtils {
      * @throws ClassNotFoundException the class name didn't match or failed to initialise.
      */
     public static Class loadFromResource(@NotNull String className, @NotNull String resourceName) throws IOException, ClassNotFoundException {
-        return loadFromJava(className, readText(resourceName));
+        return loadFromJava(className, readText(resourceName), null);
     }
 
     /**
@@ -101,11 +103,12 @@ public enum CompilerUtils {
      *
      * @param className expected class name of the outer class.
      * @param javaCode  to compile and load.
+     * @param diagnosticListener listens for compiler diagnostics
      * @return the outer class loaded.
      * @throws ClassNotFoundException the class name didn't match or failed to initialise.
      */
-    private static Class loadFromJava(@NotNull String className, @NotNull String javaCode) throws ClassNotFoundException {
-        return CACHED_COMPILER.loadFromJava(Thread.currentThread().getContextClassLoader(), className, javaCode);
+    private static Class loadFromJava(@NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
+        return CACHED_COMPILER.loadFromJava(Thread.currentThread().getContextClassLoader(), className, javaCode, diagnosticListener);
     }
 
     /**
