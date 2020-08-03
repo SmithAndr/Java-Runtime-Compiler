@@ -66,15 +66,32 @@ public class CachedCompiler implements Closeable {
         }
     }
 
+    public Class loadFromJava(@NotNull String className, @NotNull String javaCode) throws ClassNotFoundException {
+        return loadFromJava(className, javaCode, null);
+    }
 
     public Class loadFromJava(@NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
-        return loadFromJava(getClass().getClassLoader(), className, javaCode, DEFAULT_WRITER, diagnosticListener);
+        return loadFromJava(getClass().getClassLoader(), className, javaCode, diagnosticListener);
     }
 
     public Class loadFromJava(@NotNull ClassLoader classLoader,
                               @NotNull String className,
                               @NotNull String javaCode) throws ClassNotFoundException {
-        return loadFromJava(classLoader, className, javaCode, DEFAULT_WRITER);
+        return loadFromJava(classLoader, className, javaCode, DEFAULT_WRITER, null);
+    }
+
+    public Class loadFromJava(@NotNull ClassLoader classLoader,
+                              @NotNull String className,
+                              @NotNull String javaCode,
+                              @Nullable DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
+        return loadFromJava(classLoader, className, javaCode, DEFAULT_WRITER, diagnosticListener);
+    }
+
+    public Class loadFromJava(@NotNull ClassLoader classLoader,
+                              @NotNull String className,
+                              @NotNull String javaCode,
+                              @Nullable PrintWriter writer) throws ClassNotFoundException {
+        return loadFromJava(classLoader, className, javaCode, writer, null);
     }
 
     @NotNull

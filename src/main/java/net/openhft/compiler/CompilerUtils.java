@@ -55,14 +55,9 @@ public enum CompilerUtils {
 
     static {
         try {
-            Field theUnsafe = Unsafe.class.getDeclaredField("theUnsafe");
-            theUnsafe.setAccessible(true);
-            Unsafe u = (Unsafe) theUnsafe.get(null);
             DEFINE_CLASS_METHOD = ClassLoader.class.getDeclaredMethod("defineClass", String.class, byte[].class, int.class, int.class);
-            Field f = AccessibleObject.class.getDeclaredField("override");
-            long offset = u.objectFieldOffset(f);
-            u.putBoolean(DEFINE_CLASS_METHOD, offset, true);
-        } catch (NoSuchMethodException | IllegalAccessException | NoSuchFieldException e) {
+            DEFINE_CLASS_METHOD.setAccessible(true);
+        } catch (NoSuchMethodException e) {
             throw new AssertionError(e);
         }
     }

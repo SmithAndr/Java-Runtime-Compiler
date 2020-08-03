@@ -19,7 +19,6 @@
 package net.openhft.compiler;
 
 import org.jetbrains.annotations.NotNull;
-import sun.misc.Unsafe;
 
 import javax.tools.*;
 import javax.tools.JavaFileObject.Kind;
@@ -32,20 +31,6 @@ import java.net.URI;
 import java.util.*;
 
 class MyJavaFileManager implements JavaFileManager {
-    private final static Unsafe unsafe;
-    private static final long OVERRIDE_OFFSET;
-
-    static {
-        try {
-            Field theUnsafe = Unsafe.class.getDeclaredField("theUnsafe");
-            theUnsafe.setAccessible(true);
-            unsafe = (Unsafe) theUnsafe.get(null);
-            Field f = AccessibleObject.class.getDeclaredField("override");
-            OVERRIDE_OFFSET = unsafe.objectFieldOffset(f);
-        } catch (Exception ex) {
-            throw new AssertionError(ex);
-        }
-    }
 
     private final StandardJavaFileManager fileManager;
 
@@ -164,7 +149,7 @@ class MyJavaFileManager implements JavaFileManager {
             if (method.getName().equals(name) && method.getParameterTypes().length == 1 &&
                     method.getParameterTypes()[0] == Location.class) {
                 try {
-                    unsafe.putBoolean(method, OVERRIDE_OFFSET, true);
+                    method.setAccessible(true);
                     return (T) method.invoke(fileManager, location);
                 } catch (IllegalAccessException | InvocationTargetException e) {
                     throw new UnsupportedOperationException("Unable to invoke method " + name);
