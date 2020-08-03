@@ -22,6 +22,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sun.misc.Unsafe;
 
 import javax.tools.DiagnosticListener;
 import javax.tools.JavaCompiler;
@@ -30,6 +31,8 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.*;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.AccessibleObject;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.Charset;
@@ -49,13 +52,17 @@ public enum CompilerUtils {
     private static final String JAVA_CLASS_PATH = "java.class.path";
     static JavaCompiler s_compiler;
     static StandardJavaFileManager s_standardJavaFileManager;
-    static MyJavaFileManager s_fileManager;
 
     static {
         try {
+            Field theUnsafe = Unsafe.class.getDeclaredField("theUnsafe");
+            theUnsafe.setAccessible(true);
+            Unsafe u = (Unsafe) theUnsafe.get(null);
             DEFINE_CLASS_METHOD = ClassLoader.class.getDeclaredMethod("defineClass", String.class, byte[].class, int.class, int.class);
-            DEFINE_CLASS_METHOD.setAccessible(true);
-        } catch (NoSuchMethodException e) {
+            Field f = AccessibleObject.class.getDeclaredField("override");
+            long offset = u.objectFieldOffset(f);
+            u.putBoolean(DEFINE_CLASS_METHOD, offset, true);
+        } catch (NoSuchMethodException | IllegalAccessException | NoSuchFieldException e) {
             throw new AssertionError(e);
         }
     }
@@ -66,7 +73,7 @@ public enum CompilerUtils {
 
     private static boolean isDebug() {
         String inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments().toString();
-        return inputArguments.contains("-Xdebug")|| inputArguments.contains("-agentlib:jdwp=");
+        return inputArguments.contains("-Xdebug") || inputArguments.contains("-agentlib:jdwp=");
     }
 
     private static void reset() {
@@ -80,9 +87,6 @@ public enum CompilerUtils {
                 throw new AssertionError(e);
             }
         }
-
-        s_standardJavaFileManager = s_compiler.getStandardFileManager(null, null, null);
-        s_fileManager = new MyJavaFileManager(s_standardJavaFileManager);
     }
 
     /**

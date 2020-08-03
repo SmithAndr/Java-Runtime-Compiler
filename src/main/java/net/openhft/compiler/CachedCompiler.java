@@ -26,21 +26,22 @@ import org.slf4j.LoggerFactory;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticListener;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.WeakHashMap;
+import java.io.PrintWriter;
+import java.util.*;
 
-import static net.openhft.compiler.CompilerUtils.writeBytes;
-import static net.openhft.compiler.CompilerUtils.writeText;
+import static net.openhft.compiler.CompilerUtils.*;
 
 @SuppressWarnings("StaticNonFinalField")
-public class CachedCompiler {
+public class CachedCompiler implements Closeable {
     private static final Logger LOG = LoggerFactory.getLogger(CachedCompiler.class);
-    private static final Map<ClassLoader, Map<String, Class>> loadedClassesMap = new WeakHashMap<ClassLoader, Map<String, Class>>();
+    private static final PrintWriter DEFAULT_WRITER = new PrintWriter(System.err);
+
+    private final Map<ClassLoader, Map<String, Class>> loadedClassesMap = Collections.synchronizedMap(new WeakHashMap<>());
+    private final Map<ClassLoader, MyJavaFileManager> fileManagerMap = Collections.synchronizedMap(new WeakHashMap<>());
 
     @Nullable
     private final File sourceDir;
@@ -55,36 +56,63 @@ public class CachedCompiler {
         this.classDir = classDir;
     }
 
-    public static void close() {
+    public void close() {
         try {
-            CompilerUtils.s_fileManager.close();
+            for (MyJavaFileManager fileManager : fileManagerMap.values()) {
+                fileManager.close();
+            }
         } catch (IOException e) {
             throw new AssertionError(e);
         }
     }
 
+
     public Class loadFromJava(@NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
-        return loadFromJava(getClass().getClassLoader(), className, javaCode, diagnosticListener);
+        return loadFromJava(getClass().getClassLoader(), className, javaCode, DEFAULT_WRITER, diagnosticListener);
     }
 
-    private boolean errors;
+    public Class loadFromJava(@NotNull ClassLoader classLoader,
+                              @NotNull String className,
+                              @NotNull String javaCode) throws ClassNotFoundException {
+        return loadFromJava(classLoader, className, javaCode, DEFAULT_WRITER);
+    }
 
     @NotNull
-    Map<String, byte[]> compileFromJava(@NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) {
+
+    Map<String, byte[]> compileFromJava(@NotNull String className, @NotNull String javaCode, MyJavaFileManager fileManager, DiagnosticListener<? super JavaFileObject> diagnosticListener) {
+        return compileFromJava(className, javaCode, DEFAULT_WRITER, fileManager, diagnosticListener);
+    }
+
+    @NotNull
+    Map<String, byte[]> compileFromJava(@NotNull String className,
+                                        @NotNull String javaCode,
+                                        final @NotNull PrintWriter writer,
+                                        MyJavaFileManager fileManager,
+                                        DiagnosticListener<? super JavaFileObject> diagnosticListener) {
         Iterable<? extends JavaFileObject> compilationUnits;
         if (sourceDir != null) {
             String filename = className.replaceAll("\\.", '\\' + File.separator) + ".java";
             File file = new File(sourceDir, filename);
             writeText(file, javaCode);
-            compilationUnits = CompilerUtils.s_standardJavaFileManager.getJavaFileObjects(file);
+            compilationUnits = s_standardJavaFileManager.getJavaFileObjects(file);
 
         } else {
             javaFileObjects.put(className, new JavaSourceFromString(className, javaCode));
             compilationUnits = javaFileObjects.values();
         }
+        if (diagnosticListener == null) {
+            diagnosticListener = new DiagnosticListener<JavaFileObject>() {
+                @Override
+                public void report(Diagnostic<? extends JavaFileObject> diagnostic) {
+                    if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
+                        writer.println(diagnostic);
+                    }
+                }
+            };
+        }
         // reuse the same file manager to allow caching of jar files
-        boolean ok = CompilerUtils.s_compiler.getTask(null, CompilerUtils.s_fileManager, diagnosticListener, null, null, compilationUnits).call();
-        Map<String, byte[]> result = CompilerUtils.s_fileManager.getAllBuffers();
+        boolean ok = s_compiler.getTask(writer, fileManager, diagnosticListener, null, null, compilationUnits).call();
+        Map<String, byte[]> result = fileManager.getAllBuffers();
         if (!ok) {
             // compilation error, so we want to exclude this file from future compilation passes
             if (sourceDir == null)
@@ -96,7 +124,11 @@ public class CachedCompiler {
         return result;
     }
 
-    public Class loadFromJava(@NotNull ClassLoader classLoader, @NotNull String className, @NotNull String javaCode, DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
+    public Class loadFromJava(@NotNull ClassLoader classLoader,
+                              @NotNull String className,
+                              @NotNull String javaCode,
+                              @Nullable PrintWriter writer,
+                              @Nullable DiagnosticListener<? super JavaFileObject> diagnosticListener) throws ClassNotFoundException {
         Class clazz = null;
         Map<String, Class> loadedClasses;
         synchronized (loadedClassesMap) {
@@ -106,9 +138,16 @@ public class CachedCompiler {
             else
                 clazz = loadedClasses.get(className);
         }
+        PrintWriter printWriter = (writer == null ? DEFAULT_WRITER : writer);
         if (clazz != null)
             return clazz;
-        for (Map.Entry<String, byte[]> entry : compileFromJava(className, javaCode, diagnosticListener).entrySet()) {
+
+        MyJavaFileManager fileManager = fileManagerMap.get(classLoader);
+        if (fileManager == null) {
+            StandardJavaFileManager standardJavaFileManager = s_compiler.getStandardFileManager(null, null, null);
+            fileManagerMap.put(classLoader, fileManager = new MyJavaFileManager(standardJavaFileManager));
+        }
+        for (Map.Entry<String, byte[]> entry : compileFromJava(className, javaCode, printWriter, fileManager, diagnosticListener).entrySet()) {
             String className2 = entry.getKey();
             synchronized (loadedClassesMap) {
                 if (loadedClasses.containsKey(className2))
